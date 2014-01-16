@@ -61,10 +61,36 @@ uchar usbFunctionSetup(uchar data[8]) {
 		ledRedOff();
 
 	} else if (data[1] == USBASP_FUNC_TRANSMIT) {
+	  if(chip==ATM){
 		replyBuffer[0] = ispTransmit(data[2]);
 		replyBuffer[1] = ispTransmit(data[3]);
 		replyBuffer[2] = ispTransmit(data[4]);
 		replyBuffer[3] = ispTransmit(data[5]);
+	  } else {
+	    if(data[2]==0x24) {
+	      // read lock bits
+	      replyBuffer[0] = ispTransmit(data[2]);
+	      replyBuffer[1] = ispTransmit(data[3]);
+	      replyBuffer[2] = ispTransmit(data[4]);
+	      switch(ispTransmit(data[5])&0x1C) {
+	      case(0x00):replyBuffer[3]=0xE0;break;
+	      case(0x04):replyBuffer[3]=0xE5;break;
+	      case(0x0C):replyBuffer[3]=0xEE;break;
+	      case(0x1C):replyBuffer[3]=0xFF;break;
+	      }
+	    } else if(data[2]==0x30) {
+	      // read signature
+	      replyBuffer[0] = ispTransmit(0x28);
+	      replyBuffer[1] = ispTransmit(data[3]);
+	      replyBuffer[2] = ispTransmit(data[4]);
+	      replyBuffer[3] = ispTransmit(data[5]);
+	    } else {
+	      replyBuffer[0] = ispTransmit(data[2]);
+	      replyBuffer[1] = ispTransmit(data[3]);
+	      replyBuffer[2] = ispTransmit(data[4]);
+	      replyBuffer[3] = ispTransmit(data[5]);
+	    }
+	  }
 		len = 4;
 
 	} else if (data[1] == USBASP_FUNC_READFLASH) {
@@ -325,6 +351,8 @@ int main(void) {
 	/* all inputs except PC0, PC1 */
 	DDRC = 0x03;
 	PORTC = 0xfe;
+
+	chip=ATM;
 
 	/* init timer */
 	clockInit();

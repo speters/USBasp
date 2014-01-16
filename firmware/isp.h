@@ -24,6 +24,11 @@
 #define ISP_MISO  PB4
 #define ISP_SCK   PB5
 
+#define ATM 0x00
+#define S5x 0xFF
+
+unsigned char chip;
+
 /* Prepare connection to target device */
 void ispConnect();
 

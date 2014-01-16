@@ -6,7 +6,10 @@
  *                  over ISP interface
  * Licence........: GNU GPL v2 (see Readme.txt)
  * Creation Date..: 2005-02-23
- * Last change....: 2010-01-19
+ * Last change....: 2011-07-20 Miles McCoo
+ *                   merged changes need to program 89s52
+ *                   as referenced here: 
+ *                   http://www.8051projects.info/content/8051-tools/14-usb-8051-avr-programmer.html
  */
 
 #include <avr/io.h>
@@ -96,6 +99,11 @@ void ispSetSCKOption(uchar option) {
 			break;
 		}
 	}
+
+	if (chip == S5x) {
+	  ispTransmit = ispTransmit_sw;
+	  sck_sw_delay = 2;
+	}
 }
 
 void ispDelay() {
@@ -111,6 +119,7 @@ void ispConnect() {
 	/* now set output pins */
 	ISP_DDR |= (1 << ISP_RST) | (1 << ISP_SCK) | (1 << ISP_MOSI);
 
+	if(chip==ATM){
 	/* reset device */
 	ISP_OUT &= ~(1 << ISP_RST); /* RST low */
 	ISP_OUT &= ~(1 << ISP_SCK); /* SCK low */
@@ -120,6 +129,18 @@ void ispConnect() {
 	ISP_OUT |= (1 << ISP_RST); /* RST high */
 	ispDelay();
 	ISP_OUT &= ~(1 << ISP_RST); /* RST low */
+	} else {
+	  /* reset device */
+	  ISP_OUT |= (1 << ISP_RST);   /* RST high */
+	  ISP_OUT &= ~(1 << ISP_SCK);   /* SCK low */
+
+	  /* positive reset pulse > 2 SCK (target) */
+	  ispDelay();
+	  ISP_OUT &= ~(1 << ISP_RST);    /* RST low */
+	  ispDelay();                
+	  ISP_OUT |= (1 << ISP_RST);   /* RST high */
+	  ispDelay();
+	}
 
 	if (ispTransmit == ispTransmit_hw) {
 		spiHWenable();
@@ -181,8 +202,9 @@ uchar ispTransmit_hw(uchar send_byte) {
 
 uchar ispEnterProgrammingMode() {
 	uchar check;
-	uchar count = 32;
-
+	uchar count = 16;
+	chip=ATM;
+	ispConnect();
 	while (count--) {
 		ispTransmit(0xAC);
 		ispTransmit(0x53);
@@ -207,6 +229,30 @@ uchar ispEnterProgrammingMode() {
 		}
 
 	}
+
+	count=16;
+	chip=S5x;
+	if(ispTransmit==ispTransmit_hw){
+	  spiHWdisable();
+	  //ispTransmit=ispTransmit_5x;
+	} 
+	ispTransmit = ispTransmit_sw;
+	sck_sw_delay = 2;
+	ispConnect();
+	while(count--){
+	  ispTransmit(0xAC);
+	  ispTransmit(0x53);
+	  ispTransmit(0);
+	  check=ispTransmit(0);    
+	  if(check==0x69){
+	    return 0;
+	  }    
+	  /* pulse SCK */
+	  ISP_OUT|=(1<<ISP_SCK);     /* SCK high */
+	  ispDelay();
+	  ISP_OUT&= ~(1<<ISP_SCK);    /* SCK low */
+	  ispDelay();  
+	}  
 
 	return 1; /* error: device dosn't answer */
 }
@@ -233,9 +279,16 @@ uchar ispReadFlash(unsigned long address) {
 
 	ispUpdateExtended(address);
 
+	if(chip==ATM){
 	ispTransmit(0x20 | ((address & 1) << 3));
 	ispTransmit(address >> 9);
 	ispTransmit(address >> 1);
+	} else {
+	  ispTransmit(0x20);
+	  ispTransmit(address>>8);
+	  ispTransmit(address);
+	}
+
 	return ispTransmit(0);
 }
 
@@ -246,7 +299,7 @@ uchar ispWriteFlash(unsigned long address, uchar data, uchar pollmode) {
 	 return 0;
 	 }
 	 */
-
+  if(chip==ATM){
 	ispUpdateExtended(address);
 
 	ispTransmit(0x40 | ((address & 1) << 3));
@@ -278,8 +331,15 @@ uchar ispWriteFlash(unsigned long address, uchar data, uchar pollmode) {
 		}
 		return 1; /* error */
 	}
-
+  } else {  
+    ispTransmit(0x40);
+    ispTransmit(address >> 8);
+    ispTransmit(address);
+    ispTransmit(data);
+    return 0;
 }
+}
+
 
 uchar ispFlushPage(unsigned long address, uchar pollvalue) {
 
